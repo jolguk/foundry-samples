@@ -51,31 +51,26 @@ async def tool_logging_middleware(context: Any, call_next: Any) -> None:
 @chat_middleware
 async def live_view_url_inject_middleware(context: Any, call_next: Any) -> None:
     await call_next()
-    live_view_url = get_live_view_url()
-    if not live_view_url:
-        return
-
     global _last_prepended_url
-    should_prepend = _last_prepended_url != live_view_url
 
     if context.stream and isinstance(context.result, ResponseStream):
         original_stream = context.result
 
         async def _inject_url_stream() -> AsyncIterable[ChatResponseUpdate]:
             global _last_prepended_url
-            if should_prepend:
-                yield ChatResponseUpdate(
-                    contents=[
-                        Content.from_text(
-                            text=f"🔴 Created Browser Session: [Live View]({live_view_url})\n\n"
-                        )
-                    ],
-                    role="assistant",
-                )
-                _last_prepended_url = live_view_url
-
             has_text = False
             async for update in original_stream:
+                live_view_url = get_live_view_url()
+                if live_view_url and _last_prepended_url != live_view_url:
+                    yield ChatResponseUpdate(
+                        contents=[
+                            Content.from_text(
+                                text=f"🔴 Created Browser Session: [Live View]({live_view_url})\n\n"
+                            )
+                        ],
+                        role="assistant",
+                    )
+                    _last_prepended_url = live_view_url
                 yield update
                 if not has_text and update.contents:
                     has_text = any(
@@ -83,7 +78,8 @@ async def live_view_url_inject_middleware(context: Any, call_next: Any) -> None:
                         for content in update.contents
                     )
 
-            if has_text:
+            live_view_url = get_live_view_url()
+            if live_view_url and (has_text or _last_prepended_url != live_view_url):
                 yield ChatResponseUpdate(
                     contents=[
                         Content.from_text(
@@ -93,13 +89,17 @@ async def live_view_url_inject_middleware(context: Any, call_next: Any) -> None:
                     role="assistant",
                     finish_reason="stop",
                 )
+                _last_prepended_url = live_view_url
 
         context.result = ResponseStream(
             _inject_url_stream(), finalizer=ChatResponse.from_updates
         )
-    elif isinstance(context.result, ChatResponse) and should_prepend:
+    elif isinstance(context.result, ChatResponse):
         from agent_framework._types import Message
 
+        live_view_url = get_live_view_url()
+        if not live_view_url or _last_prepended_url == live_view_url:
+            return
         context.result.messages.append(
             Message("assistant", [f"\n\n🔴 [Browser Live View]({live_view_url})"])
         )

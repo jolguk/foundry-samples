@@ -22,15 +22,7 @@ public static class Middlewares
         CancellationToken cancellationToken)
     {
         var functionName = context.Function.Name;
-        var arguments = context.CallContent?.Arguments;
-        var safeArguments = arguments is null
-            ? ""
-            : Redaction.Redact(
-                string.Join(", ", arguments.Select(pair => $"{pair.Key}={pair.Value}")));
-        Logger.LogInformation(
-            "[tool] name={Name} arguments={Arguments}",
-            functionName,
-            safeArguments);
+        Logger.LogInformation("[tool] name={Name}", functionName);
 
         var result = await next(context, cancellationToken);
 
@@ -38,7 +30,7 @@ public static class Middlewares
                 "close_browser_session",
                 StringComparison.OrdinalIgnoreCase))
         {
-            _liveViewUrl = null;
+            Interlocked.Exchange(ref _liveViewUrl, null);
             return result;
         }
 
@@ -67,7 +59,9 @@ public static class Middlewares
                 return result;
             }
 
-            _liveViewUrl = liveViewUrl;
+            if (!string.IsNullOrEmpty(liveViewUrl))
+                Interlocked.Exchange(ref _liveViewUrl, liveViewUrl);
+
             Logger.LogInformation(
                 "[browser-session] id={BrowserSessionId} liveViewUrl={LiveViewUrl}",
                 browserSessionId,
@@ -100,14 +94,16 @@ public static class Middlewares
             session,
             options,
             cancellationToken);
-        if (!string.IsNullOrEmpty(_liveViewUrl))
+
+        var liveViewUrl = Interlocked.Exchange(ref _liveViewUrl, null);
+        if (!string.IsNullOrEmpty(liveViewUrl))
         {
             Logger.LogInformation(
                 "[live-view] injecting non-streaming response url={LiveViewUrl}",
-                _liveViewUrl);
+                liveViewUrl);
             response.Messages.Add(new ChatMessage(
                 ChatRole.Assistant,
-                $"\n\n🔴 [Browser Live View]({_liveViewUrl})"));
+                $"\n\n🔴 [Browser Live View]({liveViewUrl})"));
         }
         return response;
     }
@@ -120,38 +116,36 @@ public static class Middlewares
             AIAgent innerAgent,
             [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var initialUrl = _liveViewUrl;
-        var injected = !string.IsNullOrEmpty(initialUrl);
-
         await foreach (var update in innerAgent.RunStreamingAsync(
                            messages,
                            session,
                            options,
                            cancellationToken))
         {
-            if (!injected && !string.IsNullOrEmpty(_liveViewUrl))
+            var liveViewUrl = Interlocked.Exchange(ref _liveViewUrl, null);
+            if (!string.IsNullOrEmpty(liveViewUrl))
             {
                 Logger.LogInformation(
                     "[live-view] injecting streaming response url={LiveViewUrl}",
-                    _liveViewUrl);
+                    liveViewUrl);
                 yield return new AgentResponseUpdate(
                     ChatRole.Assistant,
                     [new TextContent(
-                        $"🔴 Created Browser Session: [Live View]({_liveViewUrl})\n\n")]);
-                injected = true;
+                        $"🔴 Created Browser Session: [Live View]({liveViewUrl})\n\n")]);
             }
             yield return update;
         }
 
-        if (!string.IsNullOrEmpty(_liveViewUrl))
+        var finalLiveViewUrl = Interlocked.Exchange(ref _liveViewUrl, null);
+        if (!string.IsNullOrEmpty(finalLiveViewUrl))
         {
             Logger.LogInformation(
                 "[live-view] appending final streaming response url={LiveViewUrl}",
-                _liveViewUrl);
+                finalLiveViewUrl);
             yield return new AgentResponseUpdate(
                 ChatRole.Assistant,
                 [new TextContent(
-                    $"\n\n🔴 [Browser Live View]({_liveViewUrl})")])
+                    $"\n\n🔴 [Browser Live View]({finalLiveViewUrl})")])
             {
                 FinishReason = ChatFinishReason.Stop,
             };
@@ -179,12 +173,16 @@ public static class Middlewares
 
     private static bool TryExtractBrowserSession(
         JsonElement element,
-        out string? browserSessionId,
+        out string browserSessionId,
         out string? liveViewUrl)
     {
-        browserSessionId = null;
+        string? extractedBrowserSessionId = null;
         liveViewUrl = null;
-        ExtractBrowserSessionValues(element, ref browserSessionId, ref liveViewUrl);
+        ExtractBrowserSessionValues(
+            element,
+            ref extractedBrowserSessionId,
+            ref liveViewUrl);
+        browserSessionId = extractedBrowserSessionId ?? "";
         return !string.IsNullOrEmpty(browserSessionId);
     }
 
@@ -250,4 +248,5 @@ public static class Middlewares
                 break;
         }
     }
+
 }

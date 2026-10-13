@@ -25,6 +25,7 @@ from .tools import (
     clear_live_view_url,
     get_live_view_url,
     make_toolbox_mcp_tool,
+    scrub_browser_session_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,9 @@ async def tool_logging_middleware(context: Any, call_next: Any) -> None:
         redact_sensitive_values(str(arguments)),
     )
     await call_next()
-    if function_name.endswith("close_browser_session"):
+    if function_name.endswith("create_browser_session"):
+        scrub_browser_session_result(context.result)
+    elif function_name.endswith("close_browser_session"):
         clear_live_view_url()
 
 

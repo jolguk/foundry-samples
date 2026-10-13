@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 from agent_framework._mcp import MCPStreamableHTTPTool
+from agent_framework._types import Content
 from azure.identity import get_bearer_token_provider
 
 from .settings import AgentSettings
@@ -40,36 +41,22 @@ def resolve_toolbox_endpoint(settings: AgentSettings) -> str:
     )
 
 
-def parse_toolbox_result(mcp_result: Any) -> str:
-    parsed_content: list[Any] = []
-    for item in getattr(mcp_result, "content", []) or []:
-        text = getattr(item, "text", None)
-        if text is None:
-            parsed_content.append(str(item))
+def scrub_browser_session_result(contents: list[Content]) -> None:
+    for content in contents:
+        if content.type != "text" or not content.text:
             continue
         try:
-            parsed_content.append(json.loads(text))
+            value = json.loads(content.text)
         except json.JSONDecodeError:
-            parsed_content.append(text)
-
-    if not parsed_content:
-        return "null"
-
-    if len(parsed_content) == 1:
-        value = parsed_content[0]
-        if isinstance(value, dict) and value.get("browserSessionId"):
-            result = dict(value)
-            live_view_url = result.pop("liveViewUrl", None)
-            if live_view_url:
-                global _live_view_url
-                _live_view_url = live_view_url
-                result["note"] = "The live view link is delivered directly to the user."
-            return json.dumps(result, ensure_ascii=False)
-        if isinstance(value, str):
-            return value
-        return json.dumps(value, ensure_ascii=False)
-
-    return json.dumps(parsed_content, ensure_ascii=False)
+            continue
+        if not isinstance(value, dict) or not value.get("browserSessionId"):
+            continue
+        live_view_url = value.pop("liveViewUrl", None)
+        if isinstance(live_view_url, str) and live_view_url:
+            global _live_view_url
+            _live_view_url = live_view_url
+            value["note"] = "The live view link is delivered directly to the user."
+        content.text = json.dumps(value, ensure_ascii=False)
 
 
 def make_toolbox_mcp_tool(
@@ -86,7 +73,6 @@ def make_toolbox_mcp_tool(
         http_client=http_client,
         request_timeout=settings.mcp_timeout_seconds,
         load_prompts=False,
-        parse_tool_results=parse_toolbox_result,
         description="Azure Playwright browser automation tools.",
         approval_mode="never_require",
     )

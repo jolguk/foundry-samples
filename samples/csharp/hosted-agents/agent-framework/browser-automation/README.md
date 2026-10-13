@@ -66,7 +66,7 @@ authenticate model and Toolbox calls.
 Initialize from a directory outside the sample:
 
 ```bash
-azd ai agent init -m ./browser-automation/azure.yaml
+azd ai agent init -t ./browser-automation/azure.yaml
 azd provision
 ```
 

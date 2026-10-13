@@ -82,8 +82,7 @@ azd deploy
 
 On Linux or macOS, make the generated hook scripts executable before
 provisioning. The `postprovision` hook creates the Playwright connection and
-toolbox; the `postdeploy` hook assigns browser access to the hosted agent
-identity.
+toolbox; the `postdeploy` hook assigns browser access to the configured project Identity or hosted agent identity.
 
 ## Browser lifecycle
 

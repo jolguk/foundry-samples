@@ -47,24 +47,43 @@ public static class Middlewares
                 StringComparison.OrdinalIgnoreCase))
             return result;
 
+        var serializedResult = SerializeResult(result);
+        Logger.LogInformation(
+            "[tool-result] name={Name} type={ResultType} response={Response}",
+            functionName,
+            result?.GetType().FullName ?? "<null>",
+            serializedResult);
+
         try
         {
-            using var document = JsonDocument.Parse(result?.ToString() ?? "");
-            var root = document.RootElement;
-            if (!root.TryGetProperty("browserSessionId", out var sessionId))
+            using var document = JsonDocument.Parse(serializedResult);
+            if (!TryExtractBrowserSession(
+                    document.RootElement,
+                    out var browserSessionId,
+                    out var liveViewUrl))
+            {
+                Logger.LogWarning(
+                    "[browser-session] create result did not contain browserSessionId");
                 return result;
+            }
 
-            if (root.TryGetProperty("liveViewUrl", out var liveViewUrl))
-                _liveViewUrl = liveViewUrl.GetString();
+            _liveViewUrl = liveViewUrl;
+            Logger.LogInformation(
+                "[browser-session] id={BrowserSessionId} liveViewUrl={LiveViewUrl}",
+                browserSessionId,
+                liveViewUrl ?? "<missing>");
 
             return JsonSerializer.Serialize(new
             {
-                browserSessionId = sessionId.GetString(),
+                browserSessionId,
                 note = "The live view link is delivered directly to the user.",
             });
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            Logger.LogWarning(
+                exception,
+                "[browser-session] failed to parse create result");
             return result;
         }
     }
@@ -83,6 +102,9 @@ public static class Middlewares
             cancellationToken);
         if (!string.IsNullOrEmpty(_liveViewUrl))
         {
+            Logger.LogInformation(
+                "[live-view] injecting non-streaming response url={LiveViewUrl}",
+                _liveViewUrl);
             response.Messages.Add(new ChatMessage(
                 ChatRole.Assistant,
                 $"\n\n🔴 [Browser Live View]({_liveViewUrl})"));
@@ -109,6 +131,9 @@ public static class Middlewares
         {
             if (!injected && !string.IsNullOrEmpty(_liveViewUrl))
             {
+                Logger.LogInformation(
+                    "[live-view] injecting streaming response url={LiveViewUrl}",
+                    _liveViewUrl);
                 yield return new AgentResponseUpdate(
                     ChatRole.Assistant,
                     [new TextContent(
@@ -120,6 +145,9 @@ public static class Middlewares
 
         if (!string.IsNullOrEmpty(_liveViewUrl))
         {
+            Logger.LogInformation(
+                "[live-view] appending final streaming response url={LiveViewUrl}",
+                _liveViewUrl);
             yield return new AgentResponseUpdate(
                 ChatRole.Assistant,
                 [new TextContent(
@@ -127,6 +155,99 @@ public static class Middlewares
             {
                 FinishReason = ChatFinishReason.Stop,
             };
+        }
+    }
+
+    private static string SerializeResult(object? result)
+    {
+        if (result is null)
+            return "null";
+
+        if (result is string text)
+            return JsonSerializer.Serialize(text);
+
+        try
+        {
+            return JsonSerializer.Serialize(result, result.GetType());
+        }
+        catch (Exception exception) when (
+            exception is JsonException or NotSupportedException)
+        {
+            return JsonSerializer.Serialize(result.ToString());
+        }
+    }
+
+    private static bool TryExtractBrowserSession(
+        JsonElement element,
+        out string? browserSessionId,
+        out string? liveViewUrl)
+    {
+        browserSessionId = null;
+        liveViewUrl = null;
+        ExtractBrowserSessionValues(element, ref browserSessionId, ref liveViewUrl);
+        return !string.IsNullOrEmpty(browserSessionId);
+    }
+
+    private static void ExtractBrowserSessionValues(
+        JsonElement element,
+        ref string? browserSessionId,
+        ref string? liveViewUrl)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (property.Value.ValueKind == JsonValueKind.String)
+                    {
+                        if (property.Name.Equals(
+                                "browserSessionId",
+                                StringComparison.OrdinalIgnoreCase))
+                            browserSessionId ??= property.Value.GetString();
+                        else if (property.Name.Equals(
+                                     "liveViewUrl",
+                                     StringComparison.OrdinalIgnoreCase))
+                            liveViewUrl ??= property.Value.GetString();
+                    }
+
+                    ExtractBrowserSessionValues(
+                        property.Value,
+                        ref browserSessionId,
+                        ref liveViewUrl);
+                }
+                break;
+
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    ExtractBrowserSessionValues(
+                        item,
+                        ref browserSessionId,
+                        ref liveViewUrl);
+                }
+                break;
+
+            case JsonValueKind.String:
+                var text = element.GetString();
+                if (string.IsNullOrWhiteSpace(text)
+                    || (text[0] != '{' && text[0] != '['))
+                    break;
+
+                try
+                {
+                    using var nestedDocument = JsonDocument.Parse(text);
+                    ExtractBrowserSessionValues(
+                        nestedDocument.RootElement,
+                        ref browserSessionId,
+                        ref liveViewUrl);
+                }
+                catch (JsonException exception)
+                {
+                    Logger.LogDebug(
+                        exception,
+                        "[browser-session] nested result text was not JSON");
+                }
+                break;
         }
     }
 }

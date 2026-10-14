@@ -51,6 +51,8 @@ TOOLBOX_NAME=browser-automation-tools
 
 Run `az login` before starting locally so `DefaultAzureCredential` can authenticate model and Toolbox calls.
 
+Toolbox requests use Azure Identity's `get_bearer_token_provider` for SDK-managed token caching and refresh. MCP calls retain their 120-second timeout without adding automatic HTTP retries.
+
 ## Option 1: Azure Developer CLI
 
 Initialize from a directory outside the sample:

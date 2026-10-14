@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 from azure.core.credentials import TokenCredential
+from azure.identity import get_bearer_token_provider
 
 
 @dataclass
@@ -27,7 +28,9 @@ class ToolboxClient:
         api_version: str = "v1",
     ) -> None:
         self._endpoint = endpoint
-        self._credential = credential
+        self._token_provider = get_bearer_token_provider(
+            credential, "https://ai.azure.com/.default"
+        )
         self._api_version = api_version
         self._session_id: str | None = None
         self._tools: list[dict[str, Any]] | None = None
@@ -35,9 +38,7 @@ class ToolboxClient:
         self._lock = threading.RLock()
 
     def _headers(self) -> dict[str, str]:
-        token = self._credential.get_token(
-            "https://ai.azure.com/.default"
-        ).token
+        token = self._token_provider()
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",

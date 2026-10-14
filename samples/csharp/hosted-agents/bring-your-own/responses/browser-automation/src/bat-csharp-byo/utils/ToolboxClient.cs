@@ -1,8 +1,9 @@
 // Copyright (c) Microsoft. All rights reserved.
 
-using System.Net.Http.Headers;
-using System.Text;
+using System.Net;
 using System.Text.Json;
+using Azure.Core;
+using Azure.Core.Pipeline;
 
 namespace BrowserAutomation;
 
@@ -21,7 +22,7 @@ public sealed record ToolboxCallResult(
 public sealed class ToolboxClient
 {
     private readonly string _endpoint;
-    private readonly Func<string> _getToken;
+    private readonly HttpPipeline _pipeline;
     private readonly ILogger _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly HttpClient _client = new()
@@ -35,11 +36,13 @@ public sealed class ToolboxClient
 
     public ToolboxClient(
         string endpoint,
-        Func<string> tokenProvider,
+        TokenCredential credential,
         ILogger logger)
     {
         _endpoint = endpoint;
-        _getToken = tokenProvider;
+        _pipeline = new HttpPipeline(
+            new HttpClientTransport(_client),
+            [new BearerTokenAuthenticationPolicy(credential, Constants.AzureAiScope)]);
         _logger = logger;
     }
 
@@ -199,18 +202,9 @@ public sealed class ToolboxClient
             jsonrpc = "2.0",
             method,
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            _getToken());
-        if (_sessionId is not null)
-            request.Headers.TryAddWithoutValidation("mcp-session-id", _sessionId);
-
-        using var response = await _client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        using var message = CreateMessage(payload);
+        await _pipeline.SendAsync(message, cancellationToken);
+        EnsureSuccess(message.Response);
     }
 
     private async Task<JsonElement> PostCoreAsync(
@@ -225,29 +219,43 @@ public sealed class ToolboxClient
             method,
             @params = parameters,
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
-        {
-            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue(
-            "Bearer",
-            _getToken());
-        if (_sessionId is not null)
-            request.Headers.TryAddWithoutValidation("mcp-session-id", _sessionId);
+        using var message = CreateMessage(payload);
+        await _pipeline.SendAsync(message, cancellationToken);
+        var response = message.Response;
+        EnsureSuccess(response);
+        if (response.Headers.TryGetValue("mcp-session-id", out var sessionId))
+            _sessionId = sessionId;
 
-        using var response = await _client.SendAsync(
-            request,
-            cancellationToken);
-        response.EnsureSuccessStatusCode();
-        if (response.Headers.TryGetValues("mcp-session-id", out var values))
-            _sessionId = values.FirstOrDefault();
-
-        var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        using var document = JsonDocument.Parse(body);
+        if (response.ContentStream is not { } body)
+            throw new InvalidOperationException($"MCP {method} returned no response body.");
+        using var document = await JsonDocument.ParseAsync(
+            body,
+            cancellationToken: cancellationToken);
         var root = document.RootElement;
         if (root.TryGetProperty("error", out var error))
             throw new InvalidOperationException(
                 $"MCP {method} failed: {error.GetRawText()}");
         return root.GetProperty("result").Clone();
+    }
+
+    private HttpMessage CreateMessage(string payload)
+    {
+        var message = _pipeline.CreateMessage();
+        message.Request.Method = RequestMethod.Post;
+        message.Request.Uri.Reset(new Uri(_endpoint));
+        message.Request.Content = RequestContent.Create(payload);
+        message.Request.Headers.SetValue("Content-Type", "application/json; charset=utf-8");
+        if (_sessionId is not null)
+            message.Request.Headers.SetValue("mcp-session-id", _sessionId);
+        return message;
+    }
+
+    private static void EnsureSuccess(Azure.Response response)
+    {
+        if (response.Status is < 200 or >= 300)
+            throw new HttpRequestException(
+                $"Response status code does not indicate success: {response.Status} ({response.ReasonPhrase}).",
+                null,
+                (HttpStatusCode)response.Status);
     }
 }

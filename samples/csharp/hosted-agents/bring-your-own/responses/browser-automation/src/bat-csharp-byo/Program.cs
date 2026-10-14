@@ -78,10 +78,7 @@ public class BrowserAutomationHandler : ResponseHandler
         {
             _toolbox ??= new ToolboxClient(
                 toolboxConfig.Endpoint,
-                () => toolboxConfig.Credential.GetToken(
-                    new Azure.Core.TokenRequestContext(
-                        [Constants.AzureAiScope]),
-                    default).Token,
+                toolboxConfig.Credential,
                 logger);
         }
     }

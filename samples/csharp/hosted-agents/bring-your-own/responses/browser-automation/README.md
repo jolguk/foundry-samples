@@ -33,6 +33,8 @@ TOOLBOX_NAME=browser-automation-tools
 
 For local use, run `az login` so `DefaultAzureCredential` can authenticate the model and Toolbox calls.
 
+Toolbox requests use Azure.Core's `BearerTokenAuthenticationPolicy` to cache and refresh tokens automatically. The MCP pipeline adds no automatic HTTP retries, and calls retain their 120-second timeout.
+
 ## Run locally
 
 ```bash

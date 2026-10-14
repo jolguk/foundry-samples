@@ -15,7 +15,8 @@ public sealed record ToolboxCallResult(
     string Output,
     string? BrowserSessionId,
     string? LiveViewUrl,
-    bool IsError);
+    bool IsError,
+    string? SessionName = null);
 
 public sealed class ToolboxClient
 {

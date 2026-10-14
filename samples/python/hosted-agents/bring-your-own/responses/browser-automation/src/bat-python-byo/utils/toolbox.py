@@ -16,6 +16,7 @@ class ToolboxCallResult:
     browser_session_id: str | None = None
     live_view_url: str | None = None
     is_error: bool = False
+    session_name: str | None = None
 
 
 class ToolboxClient:

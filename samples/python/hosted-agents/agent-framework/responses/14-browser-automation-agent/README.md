@@ -1,24 +1,17 @@
 # Browser Automation Agent (Python, Agent Framework)
 
-This sample hosts a Python Agent Framework agent over the Responses protocol
-and gives it the GA Azure Playwright browser tools through a Foundry Toolbox
-MCP connection.
+This sample hosts a Python Agent Framework agent over the Responses protocol and gives it the GA Azure Playwright browser tools through a Foundry Toolbox MCP connection.
 
 ## How it works
 
 1. The deployment hooks provision or reuse an Azure Playwright workspace.
-2. They create a Foundry project connection targeting
-   `https://<region>.mcp.playwright.microsoft.com/playwrightworkspaces/<id>/mcp`.
+2. They create a Foundry project connection targeting `https://<region>.mcp.playwright.microsoft.com/playwrightworkspaces/<id>/mcp`.
 3. They publish a Toolbox containing a `browser_automation` tool.
-4. Agent Framework connects to the Toolbox MCP endpoint and discovers browser
-   tools dynamically.
-5. The model calls `create_browser_session`, then passes the returned
-   `browserSessionId` to the other discovered browser tools.
-6. Middleware removes `liveViewUrl` from model-visible tool output and streams
-   the exact link directly to the user.
+4. Agent Framework connects to the Toolbox MCP endpoint and discovers browser tools dynamically.
+5. The model calls `create_browser_session`, then passes the returned `browserSessionId` to the other discovered browser tools.
+6. Middleware removes `liveViewUrl` from model-visible tool output and streams the exact link directly to the user.
 
-No browser tool schema is hardcoded in this sample, and no local browser CLI or
-CDP attachment is required.
+No browser tool schema is hardcoded in this sample, and no local browser CLI or CDP attachment is required.
 
 ## Key files
 
@@ -38,8 +31,7 @@ CDP attachment is required.
 - Python 3.11 or later for local development
 - Docker for local container builds
 
-The deployment hooks create the Playwright workspace when one is not supplied
-and assign the required roles after deployment.
+The deployment hooks create the Playwright workspace when one is not supplied and assign the required roles after deployment.
 
 ## Configuration
 
@@ -50,8 +42,7 @@ TOOLBOX_NAME=browser-automation-tools
 BROWSER_AGENT_MCP_TIMEOUT_SECONDS=120
 ```
 
-The hosted runtime supplies the Foundry endpoint. For local runs, authenticate
-with `az login`.
+The hosted runtime supplies the Foundry endpoint. For local runs, authenticate with `az login`.
 
 ## Run locally
 
@@ -71,8 +62,7 @@ curl -X POST http://localhost:8088/responses \
 
 ## Deploy
 
-Run `azd ai agent init` from outside this sample directory, then provision and
-deploy:
+Run `azd ai agent init` from outside this sample directory, then provision and deploy:
 
 ```bash
 azd ai agent init -t ./14-browser-automation-agent/azure.yaml
@@ -80,14 +70,12 @@ azd provision
 azd deploy
 ```
 
-On Linux or macOS, make the generated hook scripts executable before
-provisioning. The `postprovision` hook creates the Playwright connection and
-toolbox; the `postdeploy` hook assigns browser access to the configured project Identity or hosted agent identity.
+On Linux or macOS, make the generated hook scripts executable before provisioning. The `postprovision` hook creates the Playwright connection and toolbox; the `postdeploy` hook assigns browser access to the configured project Identity or hosted agent identity.
 
 ## Browser lifecycle
 
-The agent discovers the available tool names and schemas from MCP `tools/list`.
-It creates a session with the tool ending in `create_browser_session`, reuses
-the returned `browserSessionId`, and closes it with the tool ending in
-`close_browser_session`. Live-view URLs are emitted by application code so
-their signed fragments are not changed by the model.
+The agent discovers the available tool names and schemas from MCP `tools/list`. It creates a session with the tool ending in `create_browser_session`, reuses the returned `browserSessionId`, and closes it with the tool ending in `close_browser_session`. Live-view URLs are emitted by application code so their signed fragments are not changed by the model.
+
+Keep the browser open after successful tasks and while waiting for user input, approval, CAPTCHA, MFA, or manual browser steps. A completed response is not a request to close the browser. Resume in the same session after the user replies, and close only when the user explicitly asks.
+
+This is an agent behavior policy, not an indefinite browser-lifetime guarantee. Hosted compute and browser-service idle limits still apply.

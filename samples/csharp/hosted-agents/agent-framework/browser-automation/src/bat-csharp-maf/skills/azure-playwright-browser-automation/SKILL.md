@@ -25,14 +25,12 @@ The live-view URL is delivered directly to the user. Do not repeat or modify it.
    - `browser_select_option`
    - `browser_press_key`
 4. Take a fresh snapshot after page-changing actions.
-5. Use `browser_evaluate` only when the task genuinely requires page-side
-   JavaScript.
+5. Use `browser_evaluate` only when the task genuinely requires page-side JavaScript.
 
-Use `browser_tabs` for tab management, `browser_take_screenshot` for visual
-evidence, and `browser_network_requests` or `browser_console_messages` for
-diagnostics.
+Use `browser_tabs` for tab management, `browser_take_screenshot` for visual evidence, and `browser_network_requests` or `browser_console_messages` for diagnostics.
 
 ## Cleanup
 
-Keep healthy sessions open for follow-up work. Call `close_browser_session` only
-when explicitly requested, when the session is broken, or before replacing it.
+Keep sessions open after successful work and while waiting for user input, approval, CAPTCHA, MFA, or manual browser interaction. Resume in the same browser with a fresh snapshot when the user replies.
+
+Call `close_browser_session` only when the user explicitly requests it. If a session becomes unusable, report the problem instead of silently closing it.

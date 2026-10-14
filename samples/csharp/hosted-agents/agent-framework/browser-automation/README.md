@@ -1,8 +1,6 @@
 # Browser Automation Agent (C#, Agent Framework)
 
-This sample hosts a C# Agent Framework agent over the Responses protocol and
-gives it the GA Azure Playwright browser tools through a Foundry Toolbox MCP
-connection.
+This sample hosts a C# Agent Framework agent over the Responses protocol and gives it the GA Azure Playwright browser tools through a Foundry Toolbox MCP connection.
 
 ## What this sample demonstrates
 
@@ -12,19 +10,15 @@ connection.
 - Browser lifecycle, scraping, and form-filling guidance through prompts and skills
 - Automated Playwright workspace, connection, toolbox, and RBAC setup
 
-No browser tool schema is hardcoded in the application, and no local browser
-CLI or CDP attachment is required.
+No browser tool schema is hardcoded in the application, and no local browser CLI or CDP attachment is required.
 
 ## How it works
 
 1. Deployment hooks provision or reuse an Azure Playwright workspace.
-2. The hooks create a Foundry project connection targeting the workspace's GA
-   MCP endpoint and publish a Toolbox with a `browser_automation` tool.
+2. The hooks create a Foundry project connection targeting the workspace's GA MCP endpoint and publish a Toolbox with a `browser_automation` tool.
 3. `AddFoundryToolboxes` discovers the browser tools at runtime.
-4. The model calls the discovered `create_browser_session` tool and passes its
-   `browserSessionId` to subsequent browser calls.
-5. Middleware removes `liveViewUrl` from model-visible tool output and streams
-   the exact URL directly to the user.
+4. The model calls the discovered `create_browser_session` tool and passes its `browserSessionId` to subsequent browser calls.
+5. Middleware removes `liveViewUrl` from model-visible tool output and streams the exact URL directly to the user.
 
 ## Key files
 
@@ -44,9 +38,7 @@ CLI or CDP attachment is required.
 - .NET 10 SDK for local development
 - Docker for local container builds
 
-The provisioning hook can create a Playwright workspace when the current
-identity has permission. Set `PLAYWRIGHT_SERVICE_RESOURCE_ID` to reuse an
-existing workspace.
+The provisioning hook can create a Playwright workspace when the current identity has permission. Set `PLAYWRIGHT_SERVICE_RESOURCE_ID` to reuse an existing workspace.
 
 ## Configuration
 
@@ -58,8 +50,7 @@ AZURE_AI_MODEL_DEPLOYMENT_NAME=gpt-4.1
 TOOLBOX_NAME=browser-automation-tools
 ```
 
-Run `az login` before starting locally so `DefaultAzureCredential` can
-authenticate model and Toolbox calls.
+Run `az login` before starting locally so `DefaultAzureCredential` can authenticate model and Toolbox calls.
 
 ## Option 1: Azure Developer CLI
 
@@ -70,8 +61,7 @@ azd ai agent init -t ./browser-automation/azure.yaml
 azd provision
 ```
 
-The `postprovision` hook creates or reuses the Playwright workspace, creates the
-GA MCP connection, and publishes the `browser_automation` toolbox.
+The `postprovision` hook creates or reuses the Playwright workspace, creates the GA MCP connection, and publishes the `browser_automation` toolbox.
 
 Run and invoke locally:
 
@@ -88,13 +78,11 @@ azd deploy
 azd ai agent invoke --new-session "Open https://example.com and report the page title."
 ```
 
-The `postdeploy` hook assigns the browser role required by the configured
-project or hosted-agent identity.
+The `postdeploy` hook assigns the browser role required by the configured project or hosted-agent identity.
 
 ## Option 2: VS Code
 
-Install the Foundry Toolkit and C# Dev Kit extensions. After initializing the
-sample, press **F5** to run the agent and open Agent Inspector. To run manually:
+Install the Foundry Toolkit and C# Dev Kit extensions. After initializing the sample, press **F5** to run the agent and open Agent Inspector. To run manually:
 
 ```bash
 cd src/bat-csharp-maf
@@ -106,13 +94,13 @@ Use **Foundry Toolkit: Deploy Hosted Agent** to deploy from VS Code.
 
 ## Browser lifecycle
 
-Browser tools come from MCP `tools/list`. The agent creates a browser with the
-discovered tool ending in `create_browser_session`, reuses its
-`browserSessionId` for later calls and requests, and closes it with the
-discovered tool ending in `close_browser_session`.
+Browser tools come from MCP `tools/list`. The agent creates a browser with the discovered tool ending in `create_browser_session`, reuses its `browserSessionId` for later calls and requests, and closes it with the discovered tool ending in `close_browser_session`.
 
-Live-view URLs are emitted by middleware so their signed fragments remain
-unchanged.
+Live-view URLs are emitted by middleware so their signed fragments remain unchanged.
+
+Keep the browser open after successful tasks and while waiting for user input, approval, CAPTCHA, MFA, or manual browser steps. A completed response is not a request to close the browser. Resume in the same session after the user replies, and close only when the user explicitly asks.
+
+This is an agent behavior policy, not an indefinite browser-lifetime guarantee. Hosted compute and browser-service idle limits still apply.
 
 ## CI and non-interactive provisioning
 
@@ -130,8 +118,7 @@ azd env set PLAYWRIGHT_REGION "eastus"
 azd env set PLAYWRIGHT_AUTH_TYPE "ProjectManagedIdentity"
 ```
 
-Supported authentication values are `ProjectManagedIdentity`,
-`AgenticIdentityToken`, and interactive `ApiKey`.
+Supported authentication values are `ProjectManagedIdentity`, `AgenticIdentityToken`, and interactive `ApiKey`.
 
 ## Customize the sample
 
